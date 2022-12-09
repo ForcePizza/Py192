@@ -16,7 +16,11 @@ def main() -> None :
     for k,v in j.items() :    # ітерування по парах ключ-значення
         print( k, v ) 
 
-    # print( json.dumps( j, indent = 4 ) )
+    j["new"] = "Вітання"      # додаємо значення у Unicode ( "new": "\u0412\u0456\u0442\u0430\u043d\u043d\u044f" - Escaping)
+    print( json.dumps(              # decode / stringify / serialize
+        j,                          # об'єкт для серіалізації
+        indent = 4,                 # pretty-print (з розривом рядків та відступом 4 пробіли)
+        ensure_ascii = False ) )    # не перетворювати на ASCII (без escaping)
 
 
 if __name__ == "__main__" :

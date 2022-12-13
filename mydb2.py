@@ -2,6 +2,26 @@
 import mysql.connector
 import random
 
+def select_dicts( db : mysql.connector.MySQLConnection, order='U' ) -> tuple :
+    sql = "SELECT * FROM test t ORDER BY " + ( 't.str' if order == 'G' else 't.ukr' )
+    try :
+        cursor = db.cursor()    
+        cursor.execute( sql )  
+    except mysql.connector.Error as err :
+        print( 'select_dicts:', err )
+    else :
+        # names = cursor.column_names   # zip - (zipper "застібка-блискавка") - поєднує 
+        # row = cursor.fetchone()       # елементи першої множини з елементами другої: 1й-з 1м, 2й-з 2м,...
+        # print( dict( (k,v) for k,v in zip( names, row ) ) )
+        return ( dict( (k,v) for k,v in zip( cursor.column_names, row ) ) 
+                 for row in cursor )
+    finally :
+        try: 
+            db.commit()  
+            cursor.close()
+        except: pass
+    return
+
 def select_test( db : mysql.connector.MySQLConnection, order='U' ) -> None :
     ''' Prints table 'test' data depending on 'order' parameter: 'U'(default)-Unicode, 'G'-General '''
     sql = "SELECT * FROM test t ORDER BY " + ( 't.str' if order == 'G' else 't.ukr' )
@@ -11,14 +31,13 @@ def select_test( db : mysql.connector.MySQLConnection, order='U' ) -> None :
     except mysql.connector.Error as err :
         print( 'SELECT:', err )
     else :
-        row = cursor.fetchone(); print( row )
-        row = cursor.fetchone(); print( row )
-        row = cursor.fetchone(); print( row )
-        row = cursor.fetchone(); print( row )
-        row = cursor.fetchone(); print( row )
-        row = cursor.fetchone(); print( row )
-        row = cursor.fetchone(); print( row )
-        row = cursor.fetchone(); print( row )
+        # while True :
+        #     row = cursor.fetchone()   # передача даних від БД іде по одному рядку
+        #     if not row : break        # ознакою кінця даних є None y row
+        #     print(row)
+        print( cursor.column_names )
+        for row in cursor :    # можна ітерувати сам cursor - це повністю аналогічно    
+            print( row )       # попередньому циклу
     finally :
         try: 
             db.commit()     # InternalError("Unread result found") - якщо не всі дані "забрано"
@@ -81,7 +100,10 @@ def main( db_conf ) -> None :
         print( "Connection OK" )
         # create_table( connection )
         # insert_test( connection )
-        select_test( connection )
+        # select_test( connection )
+        # print( select_dicts( connection ) )
+        for d in select_dicts( connection ) :
+            print( d["num"], d["str"] )
     return
 
 

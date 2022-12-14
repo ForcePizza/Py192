@@ -72,22 +72,44 @@ class UserDAO :
             cursor.close()
         return
 
-    def read( self, id = None ) -> tuple | None :
-        sql = "SELECT u.* FROM `users` u"
+    def read( self, id = None, login = None ) -> tuple | None :
+        sql = "SELECT u.* FROM `users` u "
         par = []
         if id :
-            sql += " WHERE u.`id` = %s "
+            sql += "WHERE u.`id` = %s "
             par.append( id )
+        if login :
+            sql += ( "AND" if id else "WHERE" ) + " u.`login` = %s "
+            par.append( login )
         try :
             cursor = self.db.cursor( dictionary = True )
             cursor.execute( sql, par )
         except mysql.connector.Error as err :
             print( err )
         else :
-            # print( 'CNT:', cursor.rowcount, cursor.fetchone() )
             return tuple( User(row)  for row in cursor )
         finally :
             cursor.close()
+        return None
+
+    def read_auth( self, login, password ) -> User | None :
+        user = ( self.read( login = login ) + (None,) )[0]   # None - for empty list OR user
+        if user and self.hash_passw( password, user.salt ) == user.passw :
+            return user
+        return None
+    
+    def read_auth_old( self, login, password ) -> User | None :
+        try :
+            cursor = self.db.cursor( dictionary = True )
+            cursor.execute( "SELECT u.* FROM `users` u WHERE u.`login` = %s ", (login,) )
+            row = cursor.fetchone()
+            if row and self.hash_passw( password, row['salt'] ) == row['pass'] :
+                return User( row )
+        except mysql.connector.Error as err :
+            print( 'read_auth:', err )
+        finally :
+            try : cursor.close()
+            except : pass
         return None
 
 
@@ -111,8 +133,17 @@ def main( db_conf ) -> None :
     # user.passw = "123"
     userDao = UserDAO( db )
     # userDao.create( user )
-    print( userDao.read() )
-    print( userDao.read( id = 'd8df8963-0c16-4c9a-a85e-b6c35dfaa48a' ) )
+    # print( userDao.read() )
+    #(user,) = userDao.read( id = 'd8df8963-0c16-4c9a-a85e-b6c35dfaa48a' ) + (None,) ; print( user )    
+    #(user,) = userDao.read( id = '!d8df8963-0c16-4c9a-a85e-b6c35dfaa48a' ) + (None,) ; print( user )    
+    #(user,) = userDao.read( login = 'user' ) + (None,) ; print( user )    
+    #(user,) = userDao.read( login = '!user' ) + (None,) ; print( user )    
+    # print( (userDao.read( login = 'user' ) + (None,))[0] )
+
+    print( userDao.read_auth( 'admin', '123' ) )
+    print( userDao.read_auth( 'admin', '1234' ) )
+    print( userDao.read_auth( 'odmin', '1234' ) )
+    print( userDao.read_auth( 'user', '123' ) )
     return
 
 

@@ -5,8 +5,8 @@ import random
 import uuid
 
 class User :
-    def __init__( self, cursor = None ) -> None :
-        if cursor == None :
+    def __init__( self, row = None ) -> None :
+        if row == None :
             self.id         = None
             self.login      = None
             self.passw      = None
@@ -15,18 +15,22 @@ class User :
             self.avatar     = None
             self.email      = None
             self.email_code = None
+        elif isinstance( row, dict ) :
+            self.id         = row["id"]
+            self.login      = row["login"]
+            self.passw      = row["pass"]
+            self.name       = row["name"]
+            self.salt       = row["salt"]
+            self.avatar     = row["avatar"]
+            self.email      = row["email"]
+            self.email_code = row["email_code"]
         else :
-            row = cursor.fetchone()
-            if not row : raise ValueError( "Cursor has no row(s)" )
-            u = dict( (k,v) for k,v in zip( cursor.column_names, row ) )
-            self.id         = u["id"]
-            self.login      = u["login"]
-            self.passw      = u["pass"]
-            self.name       = u["name"]
-            self.salt       = u["salt"]
-            self.avatar     = u["avatar"]
-            self.email      = u["email"]
-            self.email_code = u["email_code"]
+            raise ValueError( "row type unsuppotred" )
+
+    def __str__( self ) -> str :
+        return str( self.__dict__ )
+
+    __repr__ = __str__
 
 
 class UserDAO :
@@ -68,6 +72,24 @@ class UserDAO :
             cursor.close()
         return
 
+    def read( self, id = None ) -> tuple | None :
+        sql = "SELECT u.* FROM `users` u"
+        par = []
+        if id :
+            sql += " WHERE u.`id` = %s "
+            par.append( id )
+        try :
+            cursor = self.db.cursor( dictionary = True )
+            cursor.execute( sql, par )
+        except mysql.connector.Error as err :
+            print( err )
+        else :
+            # print( 'CNT:', cursor.rowcount, cursor.fetchone() )
+            return tuple( User(row)  for row in cursor )
+        finally :
+            cursor.close()
+        return None
+
 
 
 def main( db_conf ) -> None :
@@ -78,17 +100,19 @@ def main( db_conf ) -> None :
         return
 
     print( "Connection OK" )
-    user = User()
+    # user = User()
     # user.login = "admin"
     # user.email = "admin@ukr.net"
     # user.name  = "Root Administrator"
     # user.passw = "123"
-    user.login = "user"
-    user.email = "user@ukr.net"
-    user.name  = "Experienced User"
-    user.passw = "123"
+    # user.login = "user"
+    # user.email = "user@ukr.net"
+    # user.name  = "Experienced User"
+    # user.passw = "123"
     userDao = UserDAO( db )
-    userDao.create( user )
+    # userDao.create( user )
+    print( userDao.read() )
+    print( userDao.read( id = 'd8df8963-0c16-4c9a-a85e-b6c35dfaa48a' ) )
     return
 
 

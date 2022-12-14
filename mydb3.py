@@ -1,7 +1,9 @@
 # Робота з БД: таблиця Users
+import datetime
 import hashlib    # засоби гешування
 import mysql.connector
 import random
+import time 
 import uuid
 
 class User :
@@ -15,6 +17,7 @@ class User :
             self.avatar     = None
             self.email      = None
             self.email_code = None
+            self.del_dt     = None
         elif isinstance( row, dict ) :
             self.id         = row["id"]
             self.login      = row["login"]
@@ -24,6 +27,7 @@ class User :
             self.avatar     = row["avatar"]
             self.email      = row["email"]
             self.email_code = row["email_code"]
+            self.del_dt     = row["del_dt"]
         else :
             raise ValueError( "row type unsuppotred" )
 
@@ -72,7 +76,7 @@ class UserDAO :
             cursor.close()
         return
 
-    def read( self, id = None, login = None ) -> tuple | None :
+    def read( self, id = None, login = None, ignore_deleted = True ) -> tuple | None :
         sql = "SELECT u.* FROM `users` u "
         par = []
         if id :
@@ -81,11 +85,14 @@ class UserDAO :
         if login :
             sql += ( "AND" if id else "WHERE" ) + " u.`login` = %s "
             par.append( login )
+        if ignore_deleted :
+            sql += ( "AND" if id or login else "WHERE" ) + " u.`del_dt` IS NULL "
+
         try :
             cursor = self.db.cursor( dictionary = True )
             cursor.execute( sql, par )
         except mysql.connector.Error as err :
-            print( err )
+            print( 'read:', err )
         else :
             return tuple( User(row)  for row in cursor )
         finally :
@@ -94,24 +101,56 @@ class UserDAO :
 
     def read_auth( self, login, password ) -> User | None :
         user = ( self.read( login = login ) + (None,) )[0]   # None - for empty list OR user
-        if user and self.hash_passw( password, user.salt ) == user.passw :
-            return user
+        # оскільки видалення - це мітка часу, враховуємо це при авторизації
+        if user \
+            and user.del_dt == None \
+            and self.hash_passw( password, user.salt ) == user.passw :
+                return user
         return None
     
-    def read_auth_old( self, login, password ) -> User | None :
+    def update( self, user: User ) -> bool :
+        # з user беремо id, інші поля оновлюються
+        # "UPDATE `users` u SET u.`login`= %(login)s, u.`name` = %(name)s   WHERE u.`id` = %(id)s "
+        fields = user.__dict__.keys()
+        sql = "UPDATE `users` u SET " + \
+            ','.join( f"u.`{field.replace('passw', 'pass')}` = %({field})s"  for field in fields if field != 'id' ) + \
+            " WHERE u.`id` = %(id)s "
+        # print( sql )
         try :
-            cursor = self.db.cursor( dictionary = True )
-            cursor.execute( "SELECT u.* FROM `users` u WHERE u.`login` = %s ", (login,) )
-            row = cursor.fetchone()
-            if row and self.hash_passw( password, row['salt'] ) == row['pass'] :
-                return User( row )
+            cursor = self.db.cursor()
+            cursor.execute( sql, user.__dict__ )
+            self.db.commit()
         except mysql.connector.Error as err :
-            print( 'read_auth:', err )
+            print( 'update', err )
+        else :
+            return True
+        finally :
+            cursor.close()
+        return False
+
+    def delete( self, user: User ) -> bool :
+        # через наявність реляцій у БД видаляти інформаційні одиниці ДУЖЕ не бажано
+        # одна з найпростіших реалізацій видалення - створення додаткового поля
+        # 'del_dt' з міткою часу моменту видалення. Складніше - ведення окремої таблиці видалень
+        try :
+            cursor = self.db.cursor()
+            user.del_dt = time.strftime( '%Y-%m-%d %H:%M:%S', time.localtime() )
+            cursor.execute( "UPDATE users u SET u.del_dt = %s WHERE u.id = %s", (user.del_dt, user.id,) )
+            self.db.commit()            
+        except mysql.connector.Error as err :
+            print( 'delete', err )
+        else :
+            return True
         finally :
             try : cursor.close()
             except : pass
-        return None
+        return False
 
+# Д.З. скласти методи UserDAO:
+#  restore(user) - відновлення користувача (з видалених)
+#  is_login_free( login: str ) - який проводить пошук як серед активних, так і серед
+#   видалених користувачів (можна на базі read)
+# переконатись у встановленні Apache - веб-сервера
 
 
 def main( db_conf ) -> None :
@@ -123,9 +162,9 @@ def main( db_conf ) -> None :
 
     print( "Connection OK" )
     # user = User()
-    # user.login = "admin"
-    # user.email = "admin@ukr.net"
-    # user.name  = "Root Administrator"
+    # user.login = "guest"
+    # user.email = "guest@ukr.net"
+    # user.name  = "Guest Walker"
     # user.passw = "123"
     # user.login = "user"
     # user.email = "user@ukr.net"
@@ -140,10 +179,15 @@ def main( db_conf ) -> None :
     #(user,) = userDao.read( login = '!user' ) + (None,) ; print( user )    
     # print( (userDao.read( login = 'user' ) + (None,))[0] )
 
-    print( userDao.read_auth( 'admin', '123' ) )
-    print( userDao.read_auth( 'admin', '1234' ) )
-    print( userDao.read_auth( 'odmin', '1234' ) )
-    print( userDao.read_auth( 'user', '123' ) )
+    # print( userDao.read_auth( 'admin', '123' ) )
+    # print( userDao.read_auth( 'admin', '1234' ) )
+    # print( userDao.read_auth( 'odmin', '1234' ) )
+    # ( user ) = userDao.read_auth( 'user', '123' )
+    ( user ) = userDao.read_auth( 'guest', '123' )
+    # user.email = "user@meta.ua"
+    # userDao.update( user )
+    # userDao.delete( user )
+    print( user )
     return
 
 
@@ -178,6 +222,8 @@ CREATE TABLE `users` (
   `email_code` char(6)  DEFAULT NULL COMMENT 'E-mail confirmation code',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+ALTER TABLE users ADD COLUMN del_dt DATETIME DEFAULT NULL ;
 
 ORM : відображення даних на об'єкти  -  cтворення класів, структура
 яких відповідає структурі таблиць

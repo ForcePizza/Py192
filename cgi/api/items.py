@@ -5,7 +5,7 @@ import os
 
 def send401( message:str = None ) -> None :
     print( "Status: 401 Unauthorized" )
-    print( 'WWW-Authenticate: Basic realm "Authorization required" ')
+    print( 'WWW-Authenticate: Bearer realm "Authorization required" ')
     print()
     if message :
         print( message )
@@ -20,14 +20,13 @@ else :
     send401()
     exit()
 
-if auth_header.startswith( 'Basic' ) :
-    credentials = auth_header[6:]
+if auth_header.startswith( 'Bearer' ) :
+    credentials = auth_header[7:]
 else :
-    send401( "Authorization scheme Basic required" )
+    send401( "Authorization scheme Bearer required" )
     exit()
 
-# credentials (параметр заголовку) - це Base64 кодований рядок "логін:пароль"
-# у скрипті info підготуємо зразок для "admin:123"  --> 
+
 
 
 

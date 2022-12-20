@@ -26,16 +26,20 @@ body = sys.stdin.read()
 query = os.environ["QUERY_STRING"]
 
 # утворимо base64 код
-
+cred_str   = "admin:123"                      # рядковий вигляд початкових даних
+cred_bytes = cred_str.encode( 'utf-8' )       # бітова презентація початкових даних
+code_bytes = base64.b64encode( cred_bytes )   # байт-презентація коду
+code_str   = code_bytes.decode( 'ascii' )     # рядковий вигляд коду
 
 
 print( "Connection: close" )
 print( "Content-Type: text/plain; charset=cp1251" )
 print( "" )
-print( method  )
-print( query   )
-print( headers )
-print( body    )
+print( method   )
+print( query    )
+print( headers  )
+print( body     )
+print( code_str )
 
 # '''
 # API - інтерфейс взаємодії частин програми (комплексу) між собою

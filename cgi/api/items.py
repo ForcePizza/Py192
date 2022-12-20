@@ -21,12 +21,20 @@ else :
     exit()
 
 if auth_header.startswith( 'Bearer' ) :
-    credentials = auth_header[7:]
+    token = auth_header[7:]
 else :
     send401( "Authorization scheme Bearer required" )
     exit()
 
+# Завдання: забезпечити перевірку токена Bearer-авторизації (його належність)
+# до користувача з БД. Сформувати відповідь або з контентом умовного об'єкту
+# з даними (який імітує вибірку з БД), або 401 статус
 
+# Успішне завершення
+print( "Status: 200 OK" )
+print( "Content-Type: application/json; charset=UTF-8" )
+print()
+print( f'"{token}"' )
 
 
 

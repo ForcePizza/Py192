@@ -1,6 +1,10 @@
 #!C:/Python311/python.exe
 
 import os, base64
+import mysql.connector
+import db   # config for db connection
+import dao  # User, UserDAO
+
 # Authorization Server
 
 def send401( message:str = None ) -> None :
@@ -43,8 +47,44 @@ if not ':' in data :
 
 user_login, user_password = data.split( ':', maxsplit = 1 )
 
+# підключаємось до БД
+try :
+    db = mysql.connector.connect( **db.conf )
+except mysql.connector.Error as err :
+    send401( err )
+    exit()
+
+# підключаємо userdao
+user_dao = dao.UserDAO( db )
+
+user = user_dao.read_auth( user_login, user_password )
+
+if user is None :
+    send401( "Credentials rejected" )
+    exit()
+
 # Успішне завершення
 print( "Status: 200 OKey" )
-print( "Content-Type: text/plain" )
+print( "Content-Type: application/json;charset=UTF-8" )
 print()
-print( user_login, user_password )
+print( f'''
+{{
+  "access_token": "{user.id}",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}} ''', end='' )
+
+
+# An example of such a (https://datatracker.ietf.org/doc/html/rfc6750 page 9)
+#    response is:
+
+#      HTTP/1.1 200 OK
+#      Content-Type: application/json;charset=UTF-8
+#      Cache-Control: no-store
+#      Pragma: no-cache
+#      {
+#        "access_token":"mF_9.B5f-4.1JqM",
+#        "token_type":"Bearer",
+#        "expires_in":3600,
+#        "refresh_token":"tGzv3JOkF0XG5Qx2TlKWIA"
+#      }

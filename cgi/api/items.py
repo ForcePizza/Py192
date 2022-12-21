@@ -5,10 +5,9 @@ import os
 
 def send401( message:str = None ) -> None :
     print( "Status: 401 Unauthorized" )
-    print( 'WWW-Authenticate: Bearer realm "Authorization required" ')
+    if message : print( 'Content-Type: text/plain" ')
     print()
-    if message :
-        print( message )
+    if message : print( message )
     return
     
     
@@ -26,9 +25,24 @@ else :
     send401( "Authorization scheme Bearer required" )
     exit()
 
-# Завдання: забезпечити перевірку токена Bearer-авторизації (його належність)
-# до користувача з БД. Сформувати відповідь або з контентом умовного об'єкту
-# з даними (який імітує вибірку з БД), або 401 статус
+# Перевіряємо токен
+import mysql.connector
+import db
+import dao
+# підключаємось до БД
+try :
+    db = mysql.connector.connect( **db.conf )
+except mysql.connector.Error as err :
+    send401( err )
+    exit()
+
+# підключаємо userdao
+user_dao = dao.UserDAO( db )
+
+user = user_dao.read( token ) 
+if not user :
+    send401( "Token rejected" )
+    exit()
 
 # Успішне завершення
 print( "Status: 200 OK" )
@@ -51,4 +65,15 @@ print( f'"{token}"' )
 #  - Bearer - за допомогою спеціальних токенів
 
 # Токен отримується від серверу авторизації /auth
+#
+# Робота з токенами: ведеться жунал видачі токенів
+# CREATE TABLE access_tokens( 
+#   token CHAR(40) PRIMARY KEY,
+#   expires DATETIME NOT NULL,
+#   user_id CHAR(36) NOT NULL,
+#   FOREIGN KEY (user_id) REFERENCES users(id)
+# ) ENGINE=InnoDB, DEFAULT CHARSET=UTF8
+#
+#
+#
 # '''

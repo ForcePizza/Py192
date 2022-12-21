@@ -1,8 +1,27 @@
+
+from datetime import datetime, timedelta
 import hashlib    # засоби гешування
 import mysql.connector
 import random
 import time 
 import uuid
+
+class AccessToken :
+    def __init__( self, row = None ) -> None :
+        if row == None :
+            self.token    = None
+            self.expires  = None
+            self.user_id  = None
+        elif isinstance( row, dict ) :
+            self.token    = row["token"]
+            self.expires  = row["expires"]
+            self.user_id  = row["user_id"]
+        elif isinstance( row, list ) or isinstance( row, tuple ) :
+            self.token    = row[0]
+            self.expires  = row[1]
+            self.user_id  = row[2]
+        else :
+            raise ValueError( "row type unsupported" )
 
 class User :
     def __init__( self, row = None ) -> None :
@@ -27,12 +46,41 @@ class User :
             self.email_code = row["email_code"]
             self.del_dt     = row["del_dt"]
         else :
-            raise ValueError( "row type unsuppotred" )
+            raise ValueError( "row type unsupported" )
 
     def __str__( self ) -> str :
         return str( self.__dict__ )
 
     __repr__ = __str__
+
+class AccessTokenDAO :
+    def __init__( self, db: mysql.connector.MySQLConnection ) -> None :
+        self.db = db
+    
+    def create( self, user:str|User ) -> AccessToken or None :
+        if isinstance( user, User ) :
+            user_id = user.id
+        elif isinstance( user, str ) :
+            user_id = user
+        else :
+            return None
+        access_token = AccessToken()
+        access_token.token   = random.randbytes(20).hex()
+        access_token.expires = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+        access_token.user_id = user_id
+        sql = "INSERT INTO access_tokens(`token`,`expires`,`user_id`) VALUES(%(token)s, %(expires)s, %(user_id)s )"
+        try :
+            cursor = self.db.cursor( dictionary = True )
+            cursor.execute( sql, access_token.__dict__ )
+            self.db.commit()
+        except mysql.connector.Error as err :
+            return None
+        else :
+            return access_token
+        finally :
+            cursor.close()
+        return
+
 
 
 class UserDAO :
@@ -74,7 +122,7 @@ class UserDAO :
             cursor.close()
         return
 
-    def read( self, id = None, login = None, ignore_deleted = True ) -> tuple | None :
+    def read( self, id = None, login = None, ignore_deleted = True ) -> tuple or None :
         sql = "SELECT u.* FROM `users` u "
         par = []
         if id :

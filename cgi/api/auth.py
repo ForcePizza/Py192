@@ -9,10 +9,9 @@ import dao  # User, UserDAO
 
 def send401( message:str = None ) -> None :
     print( "Status: 401 Unauthorized" )
-    print( 'WWW-Authenticate: Basic realm "Authorization required" ')
+    if message : print( 'Content-Type: text/plain" ')
     print()
-    if message :
-        print( message )
+    if message : print( message )
     return
     
 
@@ -63,15 +62,33 @@ if user is None :
     send401( "Credentials rejected" )
     exit()
 
+# Auth: у разі успішної перевірки логіну та паролю
+# перевірити чи є для цього користувача активний токен доступу -
+# якщо є, то повернути його (не генерувати новий), інакше створити новий
+# **якщо є токен, але його час валідності мешне за 10 хв, то можна перегенерувати
+# SELECT * FROM access_tokens t 
+# WHERE t.user_id = '..' AND t.expires > CURRENT_TIMESTAMP 
+# ORDER BY t.expires DESC 
+# LIMIT 1
+
+# спочатку перевіряємо чи є активний токен для цього користувача
+
+# генеруємо токен для даного користувача
+access_token = dao.AccessTokenDAO( db ).create( user )
+if not access_token :
+    send401( "Token creation error" )
+    exit()
+
 # Успішне завершення
 print( "Status: 200 OKey" )
-print( "Content-Type: application/json;charset=UTF-8" )
+print( "Content-Type: application/json; charset=UTF-8" )
+print( "Cache-Control: no-store" )
+print( "Pragma: no-cache" )
 print()
-print( f'''
-{{
-  "access_token": "{user.id}",
+print( f'''{{
+  "access_token": "{access_token.token}",
   "token_type": "Bearer",
-  "expires_in": 3600
+  "expires": "{access_token.expires}"
 }} ''', end='' )
 
 

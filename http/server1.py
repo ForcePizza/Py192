@@ -1,17 +1,66 @@
 import base64
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import os
+import mysql.connector
+import sys
+sys.path.append( './cgi/api/' )
+import db
+import dao
+
+
+class DbService :
+    __connection:mysql.connector.MySQLConnection = None
+
+    def get_connection( self ) -> mysql.connector.MySQLConnection :
+        if DbService.__connection is None or not DbService.__connection.is_connected() :
+            # print( db.conf )
+            try :
+                DbService.__connection = mysql.connector.connect( **db.conf )
+            except mysql.connector.Error as err :
+                print( err )
+                DbService.__connection = None
+        return DbService.__connection
+
+
+class DaoService :
+
+    def __init__( self, db_service ) -> None:
+        self.__db_service: DbService = db_service
+        self.__user_dao: dao.UserDAO = None                  # угода іменування: до полів з "__" додається назва класу: 
+        self.__access_token_dao: dao.AccessTokenDAO = None   # "DaoService._DaoService__user_dao". Це аналог "private"
+        return
+
+    def get_user_dao( self ) -> dao.UserDAO :
+        if self.__user_dao is None :
+            self.__user_dao = dao.UserDAO( self.__db_service.get_connection() )
+        return self.__user_dao
+
+    def get_access_token_dao( self ) -> dao.AccessTokenDAO :
+        if self.__access_token_dao is None :
+            self.__access_token_dao = dao.AccessTokenDAO( self.__db_service.get_connection() )
+        return self.__access_token_dao
+
+# print( DaoService.__user_dao )  # AttributeError: type object 'DaoService' has no attribute '__user_dao'
+# print( DaoService._DaoService__user_dao )  # OK
+
+dao_service: DaoService = None
 
 class MainHandler( BaseHTTPRequestHandler ) :
+    def __init__( self, request, client_address, server ) -> None:
+        super().__init__(request, client_address, server)   # RequestScoped - створюється при кожному запиті
+        # print( 'init', self.command )    # self.command - метод запиту (GET, POST, ...)
+    
     def do_GET( self ) -> None :
         print( self.path )    # вивід у консоль
         path_parts = self.path.split( '/' )  # розділення запиту по /
         # оскільки всі запити починаються з /, path_parts[0] - завжди порожній
-        if path_parts[1] == "" :
-            path_parts[1] = "index.html"
+        # if path_parts[1] == "" :
+        #     path_parts[1] = "index.html"
+        if self.path == '/' :
+            self.path = '/index.html'
         # перевіряємо чи path_parts[1] відповідає за існуючий файл
-        fname = ( './http/' +     # './http/' - папка з файлом серверу
-                path_parts[1] )          
+        fname = ( './http' +     # './http/' - папка з файлом серверу
+                self.path )      # path_parts[1] )          
         if os.path.isfile( fname ) :
             self.flush_file( fname )
             return
@@ -23,6 +72,7 @@ class MainHandler( BaseHTTPRequestHandler ) :
             self.send_header( "Content-Type", "text/html" )
             self.end_headers()
             self.wfile.write( "<h1>404</h1>".encode() )
+            # self.flush_file( "./http/index.html" )
         return
 
     def auth( self ) -> None :
@@ -49,14 +99,15 @@ class MainHandler( BaseHTTPRequestHandler ) :
             return
         # Розділяємо логін та пароль за ":"
         user_login, user_password = data.split( ':', maxsplit = 1 )
-
-        self.send_200( user_login + user_password )
+        # підключаємо userdao
+        user_dao = dao_service.get_user_dao()
+        user = user_dao.read_auth( user_login, user_password )
+        if user is None :
+            self.send_401( "Credentials rejected" )
+            return
+# Д.З. Реалізувати генерацію токену за авторизованим користувачем
+        self.send_200( user.id )
         return 
-    # Д.З. Забезпечити "глибокий" пошук файлів (у інших папках): для цього
-    #  - створити папки css та js
-    #  - створити у них по файлу (style.css, script.js)
-    #  - у index.html підключити ці файли, пересвідчитись у їх роботі
-    # (у стилі - достатньо мінімальних стилів, у script.js перенести з index.html)
 
     def send_401( self, message:str = None ) -> None :
         self.send_response( 401, "Unauthorized"  )
@@ -86,6 +137,10 @@ class MainHandler( BaseHTTPRequestHandler ) :
             content_type = 'image/x-icon'
         elif extension in ( 'html', 'htm' ) :
             content_type = 'text/html'
+        elif extension == 'css' :
+            content_type = "text/css"
+        elif extension == 'js' :
+            content_type = "application/javascript"
         else :
             content_type = 'application/octet-stream'
 
@@ -105,12 +160,14 @@ class MainHandler( BaseHTTPRequestHandler ) :
 
 
 def main() -> None :
+    global dao_service
     http_server = HTTPServer( 
         ( '127.0.0.1', 88 ),     # host + port = endpoint
         MainHandler )
     try :
         print( "Server started" )
-        http_server.serve_forever()
+        dao_service = DaoService( DbService() )   # ~ Inject
+        http_server.serve_forever()       
     except :
         print( "Server stopped" )
 
